@@ -2,49 +2,56 @@ import scrapy
 from bs4 import BeautifulSoup
 import lxml
 from docx import Document
-
-
-
-
-
-
-
+import  re
+import os
 
 class CommunistpartySpider(scrapy.Spider):
     name = "communistParty"
-    allowed_domains = ["example.com"]
+
 
 
     def start_requests(self):
         # 定义起始URL
         urls = [
-            'https://www.12371.cn/2021/11/16/ARTI1637053491464119.shtml'
+            'https://www.12371.cn/special/zzxd/ml1/'
         ]
         for url in urls:
             yield scrapy.Request(url, callback=self.parseContents)
 
-    def parseContents(self,resonse):
+    def parseContents(self,response):
         soup = BeautifulSoup(response.text, 'lxml')
-        fulltext = soup.find('div', {'class': 'dangyuanwang160317_ind01'})
+
+        hyperlinks = soup.find_all('a')
+        for aTag in hyperlinks:
+            url=aTag.attrs["href"]
+            title=aTag.text
+            if re.search(f"ARTI",url):
+                yield scrapy.Request(url, callback=self.parseArticle,meta={'title':title})
+
+
+
     def parseArticle(self, response):
         soup = BeautifulSoup(response.text, 'lxml')
         fulltext=soup.find('div',{'class': 'dangyuanwang160317_ind01'})
-
+        fileName=response.meta["title"]
         title=fulltext.find('h1',{'class': 'big_title'})
         fulltext=fulltext.find('div',{'class': 'font_area_mid'})
-        mainText=fulltext.find_all('p')
-
         # 创建一个新的 Word 文档
         doc = Document()
 
         # 添加标题
-        title = doc.add_heading(title.text, level=1)
-        for p in mainText:
-            paragraph = doc.add_paragraph(f'{p.text}')
-        # 设置标题的样式（可选）
-        title.bold = True
-        title.italic = False
-        title.underline = False
+        titleStyle = doc.add_heading(title.text, level=1)
 
+        mainText=fulltext.find_all('p')
+        for p in mainText:
+            if not re.search("延伸阅读",p.text):
+                doc.add_paragraph(f'{p.text}')
+        # 设置标题的样式（可选）
+        titleStyle.bold = True
+        titleStyle.italic = False
+        titleStyle.underline = False
+        fileName=fileName.replace("|","_").strip()
+        fileName=fileName.replace("，","_")
+        fileName = fileName.replace("*", "_")
         # 保存文档到本地，如果文件已存在则覆盖
-        doc.save(f'{title.text}.docx')
+        doc.save(f'./习近平著作选读/{fileName}.docx')
